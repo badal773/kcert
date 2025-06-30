@@ -18,16 +18,21 @@ public class AcmeClient(CertClient cert, KCertConfig cfg)
 
     private readonly HttpClient _http = new();
 
-    private AcmeDirectoryResponse? _dir = null;
+    private static AcmeDirectoryResponse? _dir;
+    public static AcmeDirectoryResponse Dir => _dir ?? throw new Exception("ACME directory not initialized.");
 
     public Task<AcmeAccountResponse> DeactivateAccountAsync(string key, string kid, string nonce) => PostAsync<AcmeAccountResponse>(key, new Uri(kid), new { status = "deactivated" }, kid, nonce);
     public Task<AcmeOrderResponse> GetOrderAsync(string key, Uri uri, string kid, string nonce) => PostAsync<AcmeOrderResponse>(key, uri, null, kid, nonce);
     public Task<AcmeAuthzResponse> GetAuthzAsync(string key, Uri authzUri, string kid, string nonce) => PostAsync<AcmeAuthzResponse>(key, authzUri, null, kid, nonce);
     public Task<AcmeChallengeResponse> TriggerChallengeAsync(string key, Uri challengeUri, string kid, string nonce) => PostAsync<AcmeChallengeResponse>(key, challengeUri, new { }, kid, nonce);
 
-    public async Task ReadDirectoryAsync(Uri dirUri)
+    private string _nonce = string.Empty;
+    private readonly SemaphoreSlim _lock = new(1, 1);
+
+    public static async Task ReadDirectoryAsync(KCertConfig cfg)
     {
-        using var resp = await _http.GetAsync(dirUri);
+        using var http = new HttpClient();
+        using var resp = await http.GetAsync(cfg.AcmeDir);
         if (!resp.IsSuccessStatusCode)
         {
             var result = await resp.Content.ReadAsStringAsync();
@@ -39,15 +44,9 @@ public class AcmeClient(CertClient cert, KCertConfig cfg)
         _dir = await JsonSerializer.DeserializeAsync<AcmeDirectoryResponse>(stream, options);
     }
 
-    public async Task<string> GetTermsOfServiceUrlAsync()
-    {
-        await ReadDirectoryAsync(new Uri("https://acme-v02.api.letsencrypt.org/directory"));
-        return _dir?.Meta?.TermsOfService ?? throw new Exception("_dir should be defined here");
-    }
-
     public async Task<AcmeAccountResponse> CreateAccountAsync(string nonce)
     {
-        var uri = new Uri(_dir?.NewAccount ?? throw new Exception("_dir should be defined here"));
+        var uri = new Uri(Dir.NewAccount);
         var payload = GetAccountRequestPayload(uri);
         return await PostAsync<AcmeAccountResponse>(cfg.AcmeKey, uri, payload, nonce);
     }
@@ -102,7 +101,7 @@ public class AcmeClient(CertClient cert, KCertConfig cfg)
     {
         var identifiers = hosts.Select(h => new { type = "dns", value = h }).ToArray();
         var payload = new { identifiers };
-        var uri = new Uri(_dir?.NewOrder ?? throw new Exception("_dir should be defined here"));
+        var uri = new Uri(Dir.NewOrder);
         return await PostAsync<AcmeOrderResponse>(key, uri, payload, kid, nonce);
     }
 
@@ -110,8 +109,7 @@ public class AcmeClient(CertClient cert, KCertConfig cfg)
     {
         var protectedObject = new { alg = Alg, kid, nonce, url = certUri.AbsoluteUri };
         using var resp = await PostAsync(key, certUri, null, protectedObject);
-        await CheckResponseStatusAsync(resp);
-        return await resp.Content.ReadAsStringAsync();
+        return await GetContentAsync(resp);
     }
 
     public async Task<AcmeOrderResponse> FinalizeOrderAsync(string key, Uri uri, IEnumerable<string> hosts, string kid, string nonce)
@@ -124,13 +122,17 @@ public class AcmeClient(CertClient cert, KCertConfig cfg)
     {
         var sign = cert.GetSigner(key);
         var protectedObject = new { alg = Alg, jwk = cert.GetJwk(sign), nonce, url = uri.AbsoluteUri };
-        using var resp = await PostAsync(key, uri, payloadObject, protectedObject);
-        return await ParseJsonAsync<T>(resp);
+        return await PostAsync<T>(key, uri, payloadObject, protectedObject);
     }
 
     private async Task<T> PostAsync<T>(string key, Uri uri, object? payloadObject, string kid, string nonce) where T : AcmeResponse
     {
         var protectedObject = new { alg = Alg, kid, nonce, url = uri.AbsoluteUri };
+        return await PostAsync<T>(key, uri, payloadObject, protectedObject);
+    }
+
+    private async Task<T> PostAsync<T>(string key, Uri uri, object? payloadObject, object protectedObject) where T : AcmeResponse
+    {
         using var resp = await PostAsync(key, uri, payloadObject, protectedObject);
         return await ParseJsonAsync<T>(resp);
     }
@@ -167,7 +169,7 @@ public class AcmeClient(CertClient cert, KCertConfig cfg)
 
     public async Task<string> GetNonceAsync()
     {
-        var uri = new Uri(_dir?.NewNonce ?? throw new Exception("_dir should be defined here"));
+        var uri = new Uri(Dir.NewNonce);
         using var message = new HttpRequestMessage(HttpMethod.Head, uri);
         using var resp = await _http.SendAsync(message);
 
@@ -182,16 +184,11 @@ public class AcmeClient(CertClient cert, KCertConfig cfg)
 
     private static async Task<string> GetContentAsync(HttpResponseMessage resp)
     {
-        await CheckResponseStatusAsync(resp);
-        return await resp.Content.ReadAsStringAsync();
-    }
-
-    private static async Task CheckResponseStatusAsync(HttpResponseMessage resp)
-    {
+        var content = await resp.Content.ReadAsStringAsync();
         if (!resp.IsSuccessStatusCode)
         {
-            var content = await resp.Content.ReadAsStringAsync();
             throw new Exception($"Request failed with status {resp.StatusCode} and content: {content}");
         }
+        return content;
     }
 }

@@ -57,7 +57,6 @@ public class RenewalHandler(ILogger<RenewalHandler> log, AcmeClient acme, K8sCli
 
     private async Task<AcmeAccountResponse> InitAsync()
     {
-        await acme.ReadDirectoryAsync(cfg.AcmeDir);
         var nonce = await acme.GetNonceAsync();
         return await acme.CreateAccountAsync(nonce);
     }

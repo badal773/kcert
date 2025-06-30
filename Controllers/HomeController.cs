@@ -5,10 +5,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace KCert.Controllers;
 
 [Route("")]
-public class HomeController(KCertClient kcert, K8sClient kube, KCertConfig cfg, EmailClient email, AcmeClient acme, CertClient cert) : Controller
+public class HomeController(KCertClient kcert, K8sClient kube, KCertConfig cfg, EmailClient email, CertClient cert) : Controller
 {
-    private static string? TermsOfServiceUrl = null;
-
     [HttpGet("")]
     public async Task<IActionResult> HomeAsync(CancellationToken tok)
     {
@@ -36,10 +34,9 @@ public class HomeController(KCertClient kcert, K8sClient kube, KCertConfig cfg, 
     }
 
     [HttpGet("configuration")]
-    public async Task<IActionResult> ConfigurationAsync()
+    public IActionResult Configuration()
     {
-        TermsOfServiceUrl ??= await acme.GetTermsOfServiceUrlAsync();
-        ViewBag.TermsOfService = TermsOfServiceUrl;
+        ViewBag.TermsOfService = AcmeClient.Dir.Meta.TermsOfService; 
         return View();
     }
 
