@@ -61,7 +61,6 @@ public class RenewalService(ILogger<RenewalService> log, KCertClient kcert, KCer
     {
         while (true)
         {
-            tok.ThrowIfCancellationRequested();
             await StartRenewalJobAsync(tok);
             log.LogInformation("Sleeping for {renewalTime}", cfg.RenewalTimeBetweenChecks);
             await Task.Delay(cfg.RenewalTimeBetweenChecks, tok);
@@ -78,7 +77,6 @@ public class RenewalService(ILogger<RenewalService> log, KCertClient kcert, KCer
         log.LogInformation("Checking for certs that need renewals...");
         await foreach (var secret in k8s.GetManagedSecretsAsync(tok))
         {
-            tok.ThrowIfCancellationRequested();
             await TryRenewAsync(secret, tok);
         }
 
@@ -96,7 +94,6 @@ public class RenewalService(ILogger<RenewalService> log, KCertClient kcert, KCer
             return;
         }
 
-        tok.ThrowIfCancellationRequested();
         log.LogInformation("Renewing: {ns} / {name} / {hosts}", secret.Namespace(), secret.Name(), string.Join(',', hosts));
 
         try
