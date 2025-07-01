@@ -21,34 +21,33 @@ public class AcmeClient(CertClient cert, KCertConfig cfg)
     private static AcmeDirectoryResponse? _dir;
     public static AcmeDirectoryResponse Dir => _dir ?? throw new Exception("ACME directory not initialized.");
 
-    public Task<AcmeAccountResponse> DeactivateAccountAsync(string key, string kid, string nonce) => PostAsync<AcmeAccountResponse>(key, new Uri(kid), new { status = "deactivated" }, kid, nonce);
-    public Task<AcmeOrderResponse> GetOrderAsync(string key, Uri uri, string kid, string nonce) => PostAsync<AcmeOrderResponse>(key, uri, null, kid, nonce);
-    public Task<AcmeAuthzResponse> GetAuthzAsync(string key, Uri authzUri, string kid, string nonce) => PostAsync<AcmeAuthzResponse>(key, authzUri, null, kid, nonce);
-    public Task<AcmeChallengeResponse> TriggerChallengeAsync(string key, Uri challengeUri, string kid, string nonce) => PostAsync<AcmeChallengeResponse>(key, challengeUri, new { }, kid, nonce);
-
     private string _nonce = string.Empty;
-    private readonly SemaphoreSlim _lock = new(1, 1);
 
-    public static async Task ReadDirectoryAsync(KCertConfig cfg)
+    public Task<AcmeAccountResponse> DeactivateAccountAsync(string key, string kid, CancellationToken tok) => PostAsync<AcmeAccountResponse>(key, new Uri(kid), new { status = "deactivated" }, kid, tok);
+    public Task<AcmeOrderResponse> GetOrderAsync(string key, Uri uri, string kid, CancellationToken tok) => PostAsync<AcmeOrderResponse>(key, uri, null, kid, tok);
+    public Task<AcmeAuthzResponse> GetAuthzAsync(string key, Uri authzUri, string kid, CancellationToken tok) => PostAsync<AcmeAuthzResponse>(key, authzUri, null, kid, tok);
+    public Task<AcmeChallengeResponse> TriggerChallengeAsync(string key, Uri challengeUri, string kid, CancellationToken tok) => PostAsync<AcmeChallengeResponse>(key, challengeUri, new { }, kid, tok);
+
+    public static async Task ReadDirectoryAsync(KCertConfig cfg, CancellationToken tok)
     {
         using var http = new HttpClient();
-        using var resp = await http.GetAsync(cfg.AcmeDir);
+        using var resp = await http.GetAsync(cfg.AcmeDir, tok);
         if (!resp.IsSuccessStatusCode)
         {
-            var result = await resp.Content.ReadAsStringAsync();
+            var result = await resp.Content.ReadAsStringAsync(tok);
             var message = $"Failed to read ACME directory with error response code {resp.StatusCode} and message: {result}";
             throw new Exception(message);
         }
 
-        using var stream = await resp.Content.ReadAsStreamAsync();
-        _dir = await JsonSerializer.DeserializeAsync<AcmeDirectoryResponse>(stream, options);
+        using var stream = await resp.Content.ReadAsStreamAsync(tok);
+        _dir = await JsonSerializer.DeserializeAsync<AcmeDirectoryResponse>(stream, options, tok);
     }
 
-    public async Task<AcmeAccountResponse> CreateAccountAsync(string nonce)
+    public async Task<AcmeAccountResponse> CreateAccountAsync(CancellationToken tok)
     {
         var uri = new Uri(Dir.NewAccount);
         var payload = GetAccountRequestPayload(uri);
-        return await PostAsync<AcmeAccountResponse>(cfg.AcmeKey, uri, payload, nonce);
+        return await PostAsync<AcmeAccountResponse>(cfg.AcmeKey, uri, payload, _nonce, tok);
     }
 
     private object GetAccountRequestPayload(Uri uri)
@@ -97,47 +96,47 @@ public class AcmeClient(CertClient cert, KCertConfig cfg)
         return Base64UrlTextEncoder.Encode(sig);
     }
 
-    public async Task<AcmeOrderResponse> CreateOrderAsync(string key, string kid, IEnumerable<string> hosts, string nonce)
+    public async Task<AcmeOrderResponse> CreateOrderAsync(string key, string kid, IEnumerable<string> hosts, CancellationToken tok)
     {
         var identifiers = hosts.Select(h => new { type = "dns", value = h }).ToArray();
         var payload = new { identifiers };
         var uri = new Uri(Dir.NewOrder);
-        return await PostAsync<AcmeOrderResponse>(key, uri, payload, kid, nonce);
+        return await PostAsync<AcmeOrderResponse>(key, uri, payload, kid, tok);
     }
 
-    public async Task<string> GetCertAsync(string key, Uri certUri, string kid, string nonce)
+    public async Task<string> GetCertAsync(string key, Uri certUri, string kid, CancellationToken tok)
     {
-        var protectedObject = new { alg = Alg, kid, nonce, url = certUri.AbsoluteUri };
-        using var resp = await PostAsync(key, certUri, null, protectedObject);
-        return await GetContentAsync(resp);
+        var protectedObject = new { alg = Alg, kid, _nonce, url = certUri.AbsoluteUri };
+        using var resp = await PostAsync(key, certUri, null, protectedObject, tok);
+        return await GetContentAsync(resp, tok);
     }
 
-    public async Task<AcmeOrderResponse> FinalizeOrderAsync(string key, Uri uri, IEnumerable<string> hosts, string kid, string nonce)
+    public async Task<AcmeOrderResponse> FinalizeOrderAsync(string key, Uri uri, IEnumerable<string> hosts, string kid, CancellationToken tok)
     {
         var csr = cert.GetCsr(hosts);
-        return await PostAsync<AcmeOrderResponse>(key, uri, new { csr }, kid, nonce);
+        return await PostAsync<AcmeOrderResponse>(key, uri, new { csr }, kid, tok);
     }
 
-    private async Task<T> PostAsync<T>(string key, Uri uri, object payloadObject, string nonce) where T : AcmeResponse
+    private async Task<T> PostAsync<T>(string key, Uri uri, object payloadObject, CancellationToken tok) where T : AcmeResponse
     {
         var sign = cert.GetSigner(key);
-        var protectedObject = new { alg = Alg, jwk = cert.GetJwk(sign), nonce, url = uri.AbsoluteUri };
-        return await PostAsync<T>(key, uri, payloadObject, protectedObject);
+        var protectedObject = new { alg = Alg, jwk = cert.GetJwk(sign), _nonce, url = uri.AbsoluteUri };
+        return await PostAsync<T>(key, uri, payloadObject, protectedObject, tok);
     }
 
-    private async Task<T> PostAsync<T>(string key, Uri uri, object? payloadObject, string kid, string nonce) where T : AcmeResponse
+    private async Task<T> PostAsync<T>(string key, Uri uri, object? payloadObject, string kid, CancellationToken tok) where T : AcmeResponse
     {
-        var protectedObject = new { alg = Alg, kid, nonce, url = uri.AbsoluteUri };
-        return await PostAsync<T>(key, uri, payloadObject, protectedObject);
+        var protectedObject = new { alg = Alg, kid, _nonce, url = uri.AbsoluteUri };
+        return await PostAsync<T>(key, uri, payloadObject, protectedObject, tok);
     }
 
-    private async Task<T> PostAsync<T>(string key, Uri uri, object? payloadObject, object protectedObject) where T : AcmeResponse
+    private async Task<T> PostAsync<T>(string key, Uri uri, object? payloadObject, object protectedObject, CancellationToken tok) where T : AcmeResponse
     {
-        using var resp = await PostAsync(key, uri, payloadObject, protectedObject);
-        return await ParseJsonAsync<T>(resp);
+        using var resp = await PostAsync(key, uri, payloadObject, protectedObject, tok);
+        return await ParseJsonAsync<T>(resp, tok);
     }
 
-    private async Task<HttpResponseMessage> PostAsync(string key, Uri uri, object? payloadObject, object protectedObject)
+    private async Task<HttpResponseMessage> PostAsync(string key, Uri uri, object? payloadObject, object protectedObject, CancellationToken tok)
     {
         var payloadJson = payloadObject != null ? JsonSerializer.Serialize(payloadObject) : "";
         var payload = Base64UrlTextEncoder.Encode(Encoding.UTF8.GetBytes(payloadJson));
@@ -155,36 +154,36 @@ public class AcmeClient(CertClient cert, KCertConfig cfg)
         var content = new StringContent(bodyJson, Encoding.UTF8);
         content.Headers.ContentType = new MediaTypeHeaderValue(ContentType);
 
-        return await _http.PostAsync(uri, content);
+        return await _http.PostAsync(uri, content, tok);
     }
 
-    private static async Task<T> ParseJsonAsync<T>(HttpResponseMessage resp) where T : AcmeResponse
+    private async Task<T> ParseJsonAsync<T>(HttpResponseMessage resp, CancellationToken tok) where T : AcmeResponse
     {
-        var content = await GetContentAsync(resp);
+        var content = await GetContentAsync(resp, tok);
         var result = JsonSerializer.Deserialize<T>(content, options) ?? throw new Exception($"Invalid content: {content}");
-        result.Nonce = resp.Headers.GetValues(HeaderReplayNonce).First();
+        _nonce = resp.Headers.GetValues(HeaderReplayNonce).First();
         result.Location = resp.Headers.GetValues(HeaderLocation).First();
         return result;
     }
 
-    public async Task<string> GetNonceAsync()
+    public async Task InitAsync(CancellationToken tok)
     {
         var uri = new Uri(Dir.NewNonce);
         using var message = new HttpRequestMessage(HttpMethod.Head, uri);
-        using var resp = await _http.SendAsync(message);
+        using var resp = await _http.SendAsync(message, tok);
 
         if (!resp.IsSuccessStatusCode)
         {
-            var content = await resp.Content.ReadAsStringAsync();
+            var content = await resp.Content.ReadAsStringAsync(tok);
             throw new Exception($"Unexpected response to get-nonce with status {resp.StatusCode} and content: {content}");
         }
 
-        return message.Headers.GetValues(HeaderReplayNonce).First();
+        _nonce = message.Headers.GetValues(HeaderReplayNonce).First();
     }
 
-    private static async Task<string> GetContentAsync(HttpResponseMessage resp)
+    private static async Task<string> GetContentAsync(HttpResponseMessage resp, CancellationToken tok)
     {
-        var content = await resp.Content.ReadAsStringAsync();
+        var content = await resp.Content.ReadAsStringAsync(tok);
         if (!resp.IsSuccessStatusCode)
         {
             throw new Exception($"Request failed with status {resp.StatusCode} and content: {content}");

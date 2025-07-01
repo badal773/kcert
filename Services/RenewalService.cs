@@ -47,7 +47,7 @@ public class RenewalService(ILogger<RenewalService> log, KCertClient kcert, KCer
             {
                 try
                 {
-                    await email.NotifyFailureAsync("Certificate renewal failed unexpectedly", error);
+                    await email.NotifyFailureAsync("Certificate renewal failed unexpectedly", error, cancellationToken);
                 }
                 catch (Exception ex)
                 {
@@ -101,12 +101,12 @@ public class RenewalService(ILogger<RenewalService> log, KCertClient kcert, KCer
 
         try
         {
-            await kcert.StartRenewalProcessAsync(secret.Namespace(), secret.Name(), hosts.ToArray(), tok);
-            await email.NotifyRenewalResultAsync(secret.Namespace(), secret.Name(), null);
+            await kcert.StartRenewalProcessAsync(secret.Namespace(), secret.Name(), [.. hosts], tok);
+            await email.NotifyRenewalResultAsync(secret.Namespace(), secret.Name(), null, tok);
         }
         catch (RenewalException ex)
         {
-            await email.NotifyRenewalResultAsync(secret.Namespace(), secret.Name(), ex);
+            await email.NotifyRenewalResultAsync(secret.Namespace(), secret.Name(), ex, tok);
         }
     }
 }

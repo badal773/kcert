@@ -9,7 +9,7 @@ public class EmailClient(ILogger<EmailClient> log, KCertConfig cfg)
     private const string TestSubject = "KCert Test Email";
     private const string TestMessage = "If you received this, then KCert is able to send emails!";
 
-    public async Task SendTestEmailAsync()
+    public async Task SendTestEmailAsync(CancellationToken tok)
     {
         if (!cfg.SmtpEnabled)
         {
@@ -17,20 +17,20 @@ public class EmailClient(ILogger<EmailClient> log, KCertConfig cfg)
         }
 
         log.LogInformation("Attempting to send a test email.");
-        await SendAsync(TestSubject, TestMessage);
+        await SendAsync(TestSubject, TestMessage, tok);
     }
 
-    public async Task NotifyRenewalResultAsync(string secretNamespace, string secretName, RenewalException? ex)
+    public async Task NotifyRenewalResultAsync(string secretNamespace, string secretName, RenewalException? ex, CancellationToken tok)
     {
         if (!cfg.SmtpEnabled)
         {
             return;
         }
 
-        await SendAsync(RenewalSubject(secretNamespace, secretName, ex), RenewalMessage(secretNamespace, secretName, ex));
+        await SendAsync(RenewalSubject(secretNamespace, secretName, ex), RenewalMessage(secretNamespace, secretName, ex), tok);
     }
 
-    public async Task NotifyFailureAsync(string message, Exception ex)
+    public async Task NotifyFailureAsync(string message, Exception ex, CancellationToken tok)
     {
         if (!cfg.SmtpEnabled)
         {
@@ -39,10 +39,10 @@ public class EmailClient(ILogger<EmailClient> log, KCertConfig cfg)
 
         var subject = "KCert encountered an unexpected error";
         var body = $"{message}\n\n{ex.Message}\n\n{ex.StackTrace}";
-        await SendAsync(subject, body);
+        await SendAsync(subject, body, tok);
     }
 
-    private async Task SendAsync(string subject, string text)
+    private async Task SendAsync(string subject, string text, CancellationToken tok)
     {
         var client = new SmtpClient(cfg.SmtpHost, cfg.SmtpPort)
         {
@@ -52,7 +52,7 @@ public class EmailClient(ILogger<EmailClient> log, KCertConfig cfg)
 
         var message = new MailMessage(cfg.SmtpEmailFrom, cfg.AcmeEmail, subject, text);
 
-        await client.SendMailAsync(message);
+        await client.SendMailAsync(message, tok);
     }
 
     private static string RenewalSubject(string secretNamespace, string secretName, RenewalException? ex = null)

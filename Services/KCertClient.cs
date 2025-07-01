@@ -9,7 +9,7 @@ public class KCertClient(K8sClient kube, RenewalHandler getCert, ILogger<KCertCl
 
     public async Task RenewIfNeededAsync(string ns, string name, string[] hosts, CancellationToken tok)
     {
-        var secret = await kube.GetSecretAsync(ns, name);
+        var secret = await kube.GetSecretAsync(ns, name, tok);
         tok.ThrowIfCancellationRequested();
 
         if (secret != null)
@@ -57,13 +57,13 @@ public class KCertClient(K8sClient kube, RenewalHandler getCert, ILogger<KCertCl
             await getCert.RenewCertAsync(ns, secretName, hosts, tok);
             tok.ThrowIfCancellationRequested();
 
-            await email.NotifyRenewalResultAsync(ns, secretName, null);
+            await email.NotifyRenewalResultAsync(ns, secretName, null, tok);
             tok.ThrowIfCancellationRequested();
         }
         catch (RenewalException ex)
         {
             log.LogError(ex, "Renewal failed");
-            await email.NotifyRenewalResultAsync(ns, secretName, ex);
+            await email.NotifyRenewalResultAsync(ns, secretName, ex, tok);
         }
         catch (HttpOperationException ex)
         {

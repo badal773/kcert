@@ -21,7 +21,7 @@ public class ExponentialBackoff(ILogger<ExponentialBackoff> log, KCertConfig cfg
                 log.LogError(ex, "{name} failed", actionName);
                 try
                 {
-                    await email.NotifyFailureAsync($"{actionName} failed unexpectedly", ex);
+                    await email.NotifyFailureAsync($"{actionName} failed unexpectedly", ex, tok);
                 }
                 catch (Exception ex2)
                 {

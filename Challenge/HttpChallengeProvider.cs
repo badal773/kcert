@@ -65,7 +65,7 @@ public class HttpChallengeProvider(K8sClient kube, KCertConfig cfg, ILogger<Http
         kcertIngress.Metadata.Annotations = cfg.ChallengeIngressAnnotations;
         kcertIngress.Metadata.Labels = cfg.ChallengeIngressLabels;
 
-        await kube.CreateIngressAsync(kcertIngress);
+        await kube.CreateIngressAsync(kcertIngress, tok);
         log.LogInformation("Giving challenge ingress time to propagate");
 
         if (!cfg.SkipIngressPropagationCheck)
@@ -74,7 +74,7 @@ public class HttpChallengeProvider(K8sClient kube, KCertConfig cfg, ILogger<Http
         }
         else
         {
-            await Task.Delay(cfg.ChallengeIngressMaxPropagationWaitTime);
+            await Task.Delay(cfg.ChallengeIngressMaxPropagationWaitTime, tok);
         }
     }
 

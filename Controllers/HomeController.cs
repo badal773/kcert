@@ -41,16 +41,16 @@ public class HomeController(KCertClient kcert, K8sClient kube, KCertConfig cfg, 
     }
 
     [HttpGet("test-email")]
-    public async Task<IActionResult> TestEmailAsync()
+    public async Task<IActionResult> TestEmailAsync(CancellationToken tok)
     {
-        await email.SendTestEmailAsync();
+        await email.SendTestEmailAsync(tok);
         return RedirectToAction("Configuration");
     }
 
     [HttpGet("renew/{ns}/{name}")]
-    public async Task<IActionResult> RenewAsync(string ns, string name)
+    public async Task<IActionResult> RenewAsync(string ns, string name, CancellationToken tok)
     {
-        var secret = await kube.GetSecretAsync(ns, name);
+        var secret = await kube.GetSecretAsync(ns, name, tok);
         if (secret == null)
         {
             return NotFound();
@@ -59,7 +59,7 @@ public class HomeController(KCertClient kcert, K8sClient kube, KCertConfig cfg, 
         var certVal = cert.GetCert(secret);
         var hosts = cert.GetHosts(certVal).ToArray();
 
-        await kcert.StartRenewalProcessAsync(ns, name, hosts, CancellationToken.None);
+        await kcert.StartRenewalProcessAsync(ns, name, hosts, tok);
         return RedirectToAction("Home");
     }
 }

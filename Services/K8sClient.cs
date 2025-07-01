@@ -1,11 +1,9 @@
 ﻿using k8s;
 using k8s.Autorest;
 using k8s.Models;
-using Microsoft.AspNetCore.Components.Forms;
 using System.Net;
 using System.Runtime.CompilerServices;
 using System.Text;
-using System.Windows.Markup;
 
 namespace KCert.Services;
 
@@ -31,11 +29,11 @@ public class K8sClient(KCertConfig cfg, Kubernetes client)
     private Task<V1SecretList> GetAllManagedSecretsAsync(string? tok, CancellationToken t) => client.ListSecretForAllNamespacesAsync(labelSelector: ManagedSecretLabel, continueParameter: tok, cancellationToken: t);
     private Task<V1SecretList> GetNsManagedSecretsAsync(string ns, string? tok, CancellationToken t) => client.ListNamespacedSecretAsync(ns, labelSelector: ManagedSecretLabel, continueParameter: tok, cancellationToken: t);
 
-    public async Task<V1Secret?> GetSecretAsync(string ns, string name)
+    public async Task<V1Secret?> GetSecretAsync(string ns, string name, CancellationToken tok)
     {
         try
         {
-            return await client.ReadNamespacedSecretAsync(name, ns);
+            return await client.ReadNamespacedSecretAsync(name, ns, cancellationToken: tok);
         }
         catch (HttpOperationException ex)
         {
@@ -82,14 +80,14 @@ public class K8sClient(KCertConfig cfg, Kubernetes client)
         }
     }
 
-    public async Task CreateIngressAsync(V1Ingress ingress)
+    public async Task CreateIngressAsync(V1Ingress ingress, CancellationToken tok)
     {
-        await client.CreateNamespacedIngressAsync(ingress, cfg.KCertNamespace);
+        await client.CreateNamespacedIngressAsync(ingress, cfg.KCertNamespace, cancellationToken: tok);
     }
 
-    public async Task UpdateTlsSecretAsync(string ns, string name, string key, string cert)
+    public async Task UpdateTlsSecretAsync(string ns, string name, string key, string cert, CancellationToken tok)
     {
-        var secret = await GetSecretAsync(ns, name);
+        var secret = await GetSecretAsync(ns, name, tok);
         var alreadyExists = false;
         if (secret != null)
         {
@@ -101,7 +99,7 @@ public class K8sClient(KCertConfig cfg, Kubernetes client)
             else
             {
                 // if it's an opaque secret (ie: a request to create a cert) we delete it and create the cert
-                await client.DeleteNamespacedSecretAsync(name, ns);
+                await client.DeleteNamespacedSecretAsync(name, ns, cancellationToken: tok);
             }
         }
 
@@ -127,11 +125,11 @@ public class K8sClient(KCertConfig cfg, Kubernetes client)
 
         if (alreadyExists)
         {
-            await client.ReplaceNamespacedSecretAsync(secret, name, ns);
+            await client.ReplaceNamespacedSecretAsync(secret, name, ns, cancellationToken: tok);
         }
         else
         {
-            await client.CreateNamespacedSecretAsync(secret, ns);
+            await client.CreateNamespacedSecretAsync(secret, ns, cancellationToken: tok);
         }
     }
 

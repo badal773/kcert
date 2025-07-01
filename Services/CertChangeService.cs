@@ -24,7 +24,7 @@ public class CertChangeService(ILogger<CertChangeService> log, K8sClient k8s, KC
         var start = DateTime.UtcNow;
         log.LogInformation("CheckForChangesAsync: Waiting for semaphore.");
 
-        await _sem.WaitAsync();
+        await _sem.WaitAsync(tok);
         if (_lastRun > start)
         {
             log.LogInformation("CheckForChangesAsync: Check already queued or recently completed after this request. No need to run this instance.");
@@ -57,7 +57,7 @@ public class CertChangeService(ILogger<CertChangeService> log, K8sClient k8s, KC
             foreach (var ((ns, name), hosts) in nsLookup)
             {
                 log.LogInformation("Handling cert {ns} - {name} hosts: {h}", ns, name, string.Join(",", hosts)); // Existing log, good as is.
-                await kcert.RenewIfNeededAsync(ns, name, [.. hosts], CancellationToken.None);
+                await kcert.RenewIfNeededAsync(ns, name, [.. hosts], tok);
             }
 
             log.LogInformation("CheckForChangesAsync: Check for certificate changes completed.");
