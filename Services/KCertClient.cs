@@ -3,7 +3,7 @@ using KCert.Models;
 
 namespace KCert.Services;
 
-public class KCertClient(K8sClient kube, RenewalHandler getCert, ILogger<KCertClient> log, EmailClient email, CertClient cert)
+public class KCertClient(K8sClient kube, ILogger<KCertClient> log, EmailClient email, CertClient cert, IServiceProvider svc)
 {
     private Task _running = Task.CompletedTask;
 
@@ -49,9 +49,10 @@ public class KCertClient(K8sClient kube, RenewalHandler getCert, ILogger<KCertCl
         }
         catch (Exception ex)
         {
-            log.LogError(ex, "Previous task in rewal chain failed.");
+            log.LogError(ex, "Previous task in renewal chain failed.");
         }
 
+        var getCert = svc.GetRequiredService<RenewalHandler>();
         try
         {
             await getCert.RenewCertAsync(ns, secretName, hosts, tok);
