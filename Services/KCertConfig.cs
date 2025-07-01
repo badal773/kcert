@@ -12,7 +12,6 @@ public class KCertConfig(IConfiguration cfg)
     public string KCertIngressName => GetRequiredString("KCert:IngressName");
     public int KCertServicePort => GetInt("KCert:ServicePort");
     public bool ShowRenewButton => GetBool("KCert:ShowRenewButton");
-    public int InitialSleepOnFailure => GetInt("KCert:InitialSleepOnFailure");
     public string[] NamespaceConstraints => GetString("KCert:NamespaceConstraints")?.Split(",") ?? [];
 
     public string ChallengeIngressClassName => GetRequiredString("ChallengeIngress:ClassName");

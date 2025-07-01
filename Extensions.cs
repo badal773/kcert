@@ -32,7 +32,6 @@ public static class Extensions
             .AddSingleton<CertClient>()
             .AddSingleton<ConfigMonitorService>()
             .AddSingleton<EmailClient>()
-            .AddSingleton<ExponentialBackoff>()
             .AddSingleton<IngressMonitorService>()
             .AddSingleton<K8sClient>()
             .AddSingleton<K8sWatchClient>()

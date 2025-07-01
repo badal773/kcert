@@ -1,6 +1,8 @@
-﻿namespace KCert.Services;
+﻿using Polly;
 
-public class ConfigMonitorService(ILogger<ConfigMonitorService> log, KCertConfig cfg, ExponentialBackoff exp, K8sWatchClient watch, CertChangeService certChange) : IHostedService
+namespace KCert.Services;
+
+public class ConfigMonitorService(ILogger<ConfigMonitorService> log, KCertConfig cfg, K8sWatchClient watch, CertChangeService certChange) : IHostedService
 {
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
@@ -10,7 +12,9 @@ public class ConfigMonitorService(ILogger<ConfigMonitorService> log, KCertConfig
         {
             log.LogInformation("Watching for configmaps is enabled");
             Task action() => WatchConfigMapsAsync(cancellationToken);
-            _ = exp.DoWithExponentialBackoffAsync("Watch configmaps", action, cancellationToken);
+            _ = Policy.Handle<Exception>()
+                .WaitAndRetryAsync(5, i => TimeSpan.FromSeconds(Math.Pow(2, i)))
+                .ExecuteAsync(async ct => await action(), cancellationToken);
         }
         else
         {

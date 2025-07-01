@@ -14,7 +14,6 @@ if (args.Length > 0 && args[^1] == "generate-key")
 var builder = WebApplication.CreateBuilder(args);
 Console.WriteLine($"KCert starting with environment {builder.Environment.EnvironmentName}...");
 var cfg = new KCertConfig(builder.Configuration);
-await AcmeClient.ReadDirectoryAsync(cfg, CancellationToken.None);
 
 builder.Services.AddConnections();
 builder.Services.AddControllersWithViews();
@@ -31,6 +30,8 @@ builder.WebHost.ConfigureKestrel(opt =>
 });
 
 var app = builder.Build();
+
+await AcmeClient.ReadDirectoryAsync(cfg, app.Lifetime.ApplicationStopped);
 
 // Port 8080: Full admin interface with static files and all controllers
 app.MapWhen(c => c.Connection.LocalPort == 8080, b =>

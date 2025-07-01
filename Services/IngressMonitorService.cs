@@ -1,9 +1,11 @@
 ﻿using k8s;
 using k8s.Models;
+using Polly;
+using Polly.Retry;
 
 namespace KCert.Services;
 
-public class IngressMonitorService(ILogger<IngressMonitorService> log, KCertConfig cfg, ExponentialBackoff exp, K8sWatchClient watch, CertChangeService certChange) : IHostedService
+public class IngressMonitorService(ILogger<IngressMonitorService> log, KCertConfig cfg, K8sWatchClient watch, CertChangeService certChange) : IHostedService
 {
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
@@ -12,8 +14,10 @@ public class IngressMonitorService(ILogger<IngressMonitorService> log, KCertConf
         if (cfg.WatchIngresses)
         {
             log.LogInformation("Watching for ingress is enabled");
-            var action = () => WatchIngressesAsync(cancellationToken);
-            _ = exp.DoWithExponentialBackoffAsync("Watch ingresses", action, cancellationToken);
+            Task action() => WatchIngressesAsync(cancellationToken);
+            _ = Policy.Handle<Exception>()
+                .WaitAndRetryAsync(5, i => TimeSpan.FromSeconds(Math.Pow(2, i)))
+                .ExecuteAsync(async ct => await action(), cancellationToken);
         }
         else
         {
