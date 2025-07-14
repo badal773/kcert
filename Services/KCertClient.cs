@@ -149,7 +149,7 @@ public class KCertClient
         var path = new V1HTTPIngressPath
         {
             Path = "/.well-known/acme-challenge/",
-            PathType = "Prefix",
+            PathType = "ImplementationSpecific",
             Backend = new()
             {
                 Service = new()
